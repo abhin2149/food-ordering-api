@@ -86,3 +86,11 @@ async def get_restaurants_by_delivery_time(time_in_minutes: int, user: User, eng
     restaurant_time_map = dict(zip(restaurant_time, restaurants))
     return [outlet for time, outlet in restaurant_time_map.items() if time < time_in_seconds]
 
+
+async def get_restaurants_by_food_preferences(food_preferences: str, engine) -> List[RestaurantResponse]:
+    restaurants: List[Restaurant] = await engine.find(Restaurant)
+    resolved_restaurants = [await build_restaurant_response(outlet, engine) for outlet in restaurants]
+    return [outlet for outlet in resolved_restaurants if food_preferences in [item.title for item in outlet.menu]]
+
+
+

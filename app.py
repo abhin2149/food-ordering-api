@@ -5,12 +5,12 @@ from models.riders import Rider, RiderResponse, Location
 from models.orders import Order, OrderResponse, OrdersByUser, OrdersByRider
 from utils.helper import (build_restaurant_response, build_order_response, get_order_amount, build_user_response,
                           build_rider_response, get_orders_by_user, get_orders_by_rider, get_nearest_rider,
-                          get_restaurants_by_delivery_time)
+                          get_restaurants_by_delivery_time, get_restaurants_by_food_preferences)
 from utils.hasher import hash_password
 from db.mongo_connect import mongo_engine
 from odmantic import ObjectId
-from fastapi import FastAPI, HTTPException
-from typing import List
+from fastapi import FastAPI, HTTPException, Body
+from typing import List, Annotated
 
 app = FastAPI()
 engine = mongo_engine()
@@ -43,7 +43,7 @@ async def get_user(id: ObjectId):
 
 # Get Restaurants by delivery time
 @app.get("/user/restaurants/{user_id}", response_model=List[RestaurantResponse])
-async def get_restaurants(user_id: ObjectId, time_in_minutes: int):
+async def get_restaurants_time(user_id: ObjectId, time_in_minutes: int):
     user = await engine.find_one(User, User.id == user_id)
     if user is None:
         raise HTTPException(404)
@@ -51,6 +51,24 @@ async def get_restaurants(user_id: ObjectId, time_in_minutes: int):
     if len(restaurants) == 0:
         raise HTTPException(404)
     return [await build_restaurant_response(outlet, engine) for outlet in restaurants]
+
+
+# Get Restaurants by food preferences
+@app.post("/user/restaurant", response_model=List[RestaurantResponse])
+async def get_restaurants_by_food(food_preference: str):
+    restaurants = await get_restaurants_by_food_preferences(food_preference, engine)
+    if len(restaurants) == 0:
+        raise HTTPException(404)
+    return restaurants
+
+
+# Get history of Orders placed by a User
+@app.get("/user/order/{user_id}", response_model=List[OrdersByUser])
+async def get_order_by_user(user_id: ObjectId):
+    orders = await engine.find(Order, Order.user == user_id)
+    if len(orders) == 0:
+        raise HTTPException(404)
+    return await get_orders_by_user(orders, engine)
 
 
 # FoodItem API
@@ -73,6 +91,7 @@ async def get_food_item(id: ObjectId):
 
 
 # Rider API
+
 
 # Register a rider
 @app.put("/rider", response_model=Rider)
@@ -100,6 +119,15 @@ async def get_rider(id: ObjectId, loc: Location):
     rider.cur_loc = loc
     await engine.save(rider)
     return build_rider_response(rider)
+
+
+# Get history of Orders delivered by a rider
+@app.get("/rider/order/{rider_id}", response_model=List[OrdersByRider])
+async def get_order_by_rider(rider_id: ObjectId):
+    orders = await engine.find(Order, Order.rider == rider_id)
+    if len(orders) == 0:
+        raise HTTPException(404)
+    return await get_orders_by_rider(orders, engine)
 
 
 # Restaurant API
@@ -154,23 +182,3 @@ async def assign_rider(order_id: ObjectId):
     order.status = "Ready"
     await engine.save(order)
     return await build_order_response(order, engine)
-
-
-# Get history of Orders placed by a User
-@app.get("/order/user/{user_id}", response_model=List[OrdersByUser])
-async def get_order_by_user(user_id: ObjectId):
-    orders = await engine.find(Order, Order.user == user_id)
-    if len(orders) == 0:
-        raise HTTPException(404)
-    return await get_orders_by_user(orders, engine)
-
-
-# Get history of Orders delivered by a rider
-@app.get("/order/rider/{rider_id}", response_model=List[OrdersByRider])
-async def get_order_by_rider(rider_id: ObjectId):
-    orders = await engine.find(Order, Order.rider == rider_id)
-    if len(orders) == 0:
-        raise HTTPException(404)
-    return await get_orders_by_rider(orders, engine)
-
-
