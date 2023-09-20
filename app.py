@@ -4,7 +4,8 @@ from models.restaurants import Restaurant, RestaurantResponse
 from models.riders import Rider, RiderResponse, Location
 from models.orders import Order, OrderResponse, OrdersByUser, OrdersByRider
 from utils.helper import (build_restaurant_response, build_order_response, get_order_amount, build_user_response,
-                          build_rider_response, get_orders_by_user, get_orders_by_rider, get_nearest_rider)
+                          build_rider_response, get_orders_by_user, get_orders_by_rider, get_nearest_rider,
+                          get_restaurants_by_delivery_time)
 from utils.hasher import hash_password
 from db.mongo_connect import mongo_engine
 from odmantic import ObjectId
@@ -40,7 +41,20 @@ async def get_user(id: ObjectId):
     return build_user_response(user)
 
 
+# Get Restaurants by delivery time
+@app.get("/user/restaurants/{user_id}", response_model=List[RestaurantResponse])
+async def get_restaurants(user_id: ObjectId, time_in_minutes: int):
+    user = await engine.find_one(User, User.id == user_id)
+    if user is None:
+        raise HTTPException(404)
+    restaurants = await get_restaurants_by_delivery_time(time_in_minutes, user, engine)
+    if len(restaurants) == 0:
+        raise HTTPException(404)
+    return [await build_restaurant_response(outlet, engine) for outlet in restaurants]
+
+
 # FoodItem API
+
 
 # Add a food item
 @app.put("/food-item", response_model=FoodItem)
@@ -87,15 +101,15 @@ async def get_rider(id: ObjectId, loc: Location):
     await engine.save(rider)
     return build_rider_response(rider)
 
+
 # Restaurant API
 
-
 # Register a restaurant
-@app.put("/restaurant", response_model=Restaurant)
+@app.put("/restaurant", response_model=RestaurantResponse)
 async def register_restaurant(outlet: Restaurant):
     outlet.password = hash_password(outlet.password)
     await engine.save(outlet)
-    return outlet
+    return await build_restaurant_response(outlet, engine)
 
 
 # Fetch details of a restaurant
@@ -107,19 +121,15 @@ async def get_restaurant(id: ObjectId):
     return await build_restaurant_response(outlet, engine)
 
 
-# Get Restaurants by delivery time and user food preferences
-
-
 # Order API
 
-
 # Accept an Order
-@app.put("/order", response_model=Order)
+@app.put("/order", response_model=OrderResponse)
 async def register_order(order: Order):
     order.amount = await get_order_amount(order, engine)
     order.status = "Accepted"
     await engine.save(order)
-    return order
+    return await build_order_response(order, engine)
 
 
 # Get an Order

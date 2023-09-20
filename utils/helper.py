@@ -2,9 +2,13 @@ from typing import List
 from utils.api import get_distance_time_between_locations
 from models.restaurants import Restaurant, RestaurantResponse
 from models.users import User, UserResponse
-from models.riders import Rider, RiderResponse
+from models.riders import Rider, RiderResponse, Location
 from models.food_items import FoodItem
 from models.orders import Order, OrderResponse, OrdersByUser, OrdersByRider
+
+
+def loc_to_string(loc: Location):
+    return str(loc.lat) + ',' + str(loc.long)
 
 
 def build_user_response(user: User) -> UserResponse:
@@ -69,8 +73,16 @@ async def get_orders_by_rider(orders: List[Order], engine) -> List[OrdersByRider
 async def get_nearest_rider(order: Order, engine) -> Rider:
     restaurant: Restaurant = await engine.find_one(Restaurant, Restaurant.id == order.restaurant)
     riders: List[Rider] = await engine.find(Rider)
-    rider_time = get_distance_time_between_locations(restaurant.address, [rider.cur_loc for rider in riders])
+    rider_time = get_distance_time_between_locations(restaurant.address, [loc_to_string(rider.cur_loc) for rider in riders])
     rider_time_map = dict(zip(rider_time, riders))
     rider_time.sort()
     return rider_time_map.get(rider_time[0])
+
+
+async def get_restaurants_by_delivery_time(time_in_minutes: int, user: User, engine) -> List[Restaurant]:
+    restaurants: List[Restaurant] = await engine.find(Restaurant)
+    time_in_seconds = time_in_minutes*60
+    restaurant_time = get_distance_time_between_locations(user.address, [outlet.address for outlet in restaurants])
+    restaurant_time_map = dict(zip(restaurant_time, restaurants))
+    return [outlet for time, outlet in restaurant_time_map.items() if time < time_in_seconds]
 
